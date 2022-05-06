@@ -1,0 +1,59 @@
+
+```{r}
+if(!require(dplyr)) install.packages("dplyr"); library(dplyr)
+if(!require(rvest)) install.packages("rvest"); library(rvest)
+if(!require(httr)) install.packages("httr"); library(httr)
+if(!require(stringi)) install.packages("stringi"); library(stringi)
+```
+
+
+```{r}
+seasons_url <-
+  "https://raw.githubusercontent.com/JaseZiv/worldfootballR_data/master/raw-data/transfermarkt_leagues/main_comp_seasons.csv"
+seasons <-
+  read.csv(seasons_url,
+           stringsAsFactors = F,
+           encoding = "UTF-8")
+
+head(seasons)
+```
+
+```{r}
+seasons <-
+  # Only Europe 2021 seasons.
+  seasons |> filter(region == 'Europe' &
+                    season_start_year == 2021) |> 
+  # Replace url domain to get german names, currency etc.
+  mutate(comp_url = str_replace(comp_url, ".com", ".at"))
+seasons
+```
+
+```{r}
+df = tibble()
+for (i in 1:nrow(seasons)) {
+  row <- seasons[i,]
+  # Get the competition url response.
+  session <- session(row$comp_url)
+  
+  # Read the competition-club table.
+  df_league <-
+    session |> html_element('#yw1 .items tbody') |> html_table()
+  df_league <- df_league |> 
+    select(X2, X7) |> rename("Verein" = X2, "Marktwert (Mio. EUR)" = X7) |> 
+    mutate(Marktwert = stri_extract(Marktwert, regex = "[\\d,]+"))
+  df_league$Liga = row$comp_name
+  df_league$Land = row$country
+  
+  # Append dataframe to final dataframe.
+  df <- df |> bind_rows(df_league)
+}
+head(df)
+```
+
+```{r}
+write.table(df,
+            file = "vereine_marktwert.csv",
+            row.names = F,
+            fileEncoding = "UTF-8")
+```
+
